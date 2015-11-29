@@ -1,28 +1,50 @@
 #!/bin/bash
-TCP_SERVICES = "22"
-UCP_SERVICES = ""
-REMOTE_TCP_SERVICES ="80 443" # web browsing
-REMOTE_UDP_SERVICES = "53" #DNS
-SSH = "22"
+case $1 in
+start)
+        iptables -P INPUT ACCEPT
+        iptables -P FORWARD ACCEPT
+        iptables -P OUTPUT ACCEPT
 
-if !(-x /sbin/iptables) #debugging
-exit 0
-fi
+        iptables -N DEBUT
+        iptables -N G1
+        iptables -N G2
+        iptables -N G3
+        iptables -N G4
+        iptables -N FIN
 
-/sbin/iptables -F
-/sbin/iptables -X
+        iptables -A INPUT -m conntrack --cstate ESTABLISHED, RELATED -j ACCEPT
+        iptables -A INPUT -j DEBUT
 
-#Default rules
-/sbin/iptables -P INPUT 
-/sbin/iptables -P FORWARD 
-/sbin/iptables -P OUTPUT ACCEPT
+        iptables -A G1 -p tcp --dport 1111 -m recent --name ETAT1 --set -j DROP
+        iptables -A G1 -j DROP
 
-#Accept in/out connexions
-/sbin/iptables -t filter -A INPUT -p TCP --dport ${TCP} -j ACCEPT
-/sbin/iptables -t filter -A OUTPUT -p TCP --sport ${TCP} -j ACCEPT 
+        iptables -A G2 -m recent --name ETAT1 --remove
+        iptables -A G2 -p tcp --dport 2222 -m recent --name ETAT2 --set -j DROP
+        iptables -A G2 -j G1
 
-#refuse all over connexions
-/sbin/iptables -t filter -A INPUT -j DROP
-/sbin/iptables -t filter OUTPUT -j DROP
+        iptables -A G3 -m recent --name ETAT2 --remove
+        iptables -A G3 -p tcp --dport 3333 -m recent --name ETAT3 --set -j DROP
+        iptables -A G3 -j DROP
 
-/sbin/iptables -L
+        iptables -A G4 -m recent --name ETAT3 --remove
+        iptables -A G4 -p tcp --dport 4444 -m recent --name ETAT4 --set -j DROP
+        iptables -A G4 -j DROP
+
+        iptables -A FIN -m recent --name ETAT4 --remove
+        iptables -A FIN -p tcp --dport 22 -j ACCEPT
+        iptables -A FIN -j G1
+
+        iptables -A DEBUT -m recent --rcheck --name ETAT4 -j FIN
+        iptables -A DEBUT -m recent --rcheck --name ETAT3 -j G4
+        iptables -A DEBUT -m recent --rcheck --name ETAT2 -j G3
+        iptables -A DEBUT -m recent --rcheck --name ETAT1 -j G2
+        iptables -A DEBUT -j G1
+;;
+
+stop)
+        iptables -F
+        iptables -X
+;;
+esac
+
+        iptables -L
